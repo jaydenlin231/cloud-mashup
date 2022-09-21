@@ -1,0 +1,111 @@
+<accordion [isAnimated]="true">
+  <accordion-group>
+    <div accordion-heading class="row justify-content-center">
+      <div class="col-md-auto">
+        <div class="row justify-content-center">
+          <h2 style="margin-top: 0.5em">
+            {{ tickerObj.ticker }}
+          </h2>
+        </div>
+      </div>
+    </div>
+    <!-- Start News Carousel -->
+    <h2>News Articles that mentioned "{{ tickerObj.ticker }}"</h2>
+    <carousel [noPause]="false" [isAnimated]="true">
+      <slide *ngFor="let articleObj of tickerObj.articles">
+        <!-- Start Carousel Image -->
+        <img
+          *ngIf="articleObj.image"
+          src="{{ articleObj.image }}"
+          alt="first slide"
+          style="display: block; width: 100%; height: 50%"
+        />
+        <img
+          *ngIf="articleObj.image === '' || articleObj.image === null"
+          src="../../../../../assets/images/dalle-wolf.png"
+          alt="first slide"
+          style="display: block; width: 100%; height: 50%"
+        />
+        <!-- End Carousel Image -->
+        <!-- Start Text Blobk -->
+        <div class="carousel-caption" style="border: 1em">
+          <!-- Start Title Summary Blobk -->
+          <div class="row">
+            <a href="{{ articleObj.url }}" target="_blank">
+              <h2>{{ articleObj.title }}</h2>
+            </a>
+            <p>{{ articleObj.summary }}</p>
+          </div>
+          <!-- End Title Summary Blobk -->
+          <!-- Start Footer Block -->
+          <div class="row justify-content-around align-items-center">
+            <hr />
+            <div class="col">
+              <small>{{
+                getLocaleDateTimeString(articleObj.dateTimePublished)
+              }}</small>
+            </div>
+            <div class="col">
+              <small>Source: {{ articleObj.source }}</small>
+            </div>
+            <div class="col" *ngIf="articleObj.related !== undefined">
+              <span class="badge bg-success">
+                {{ articleObj.related }}
+              </span>
+            </div>
+            <div class="col" *ngIf="articleObj.topics !== undefined">
+              <div class="row justify-content-between">
+                <div class="col">
+                  <small
+                    *ngFor="
+                      let topicObj of sortTopicsArray(articleObj);
+                      index as i
+                    "
+                  >
+                    <span class="badge bg-primary" *ngIf="i < 3">
+                      {{ topicObj.topic }}
+                    </span>
+                  </small>
+                </div>
+              </div>
+            </div>
+            <br />
+          </div>
+          <!-- End Footer Block -->
+        </div>
+        <!-- End Text Blobk -->
+      </slide>
+    </carousel>
+    <!-- End News Carousel -->
+    <!-- Start Social Sentiment -->
+    <div>
+      <hr />
+      <h2>Social Sentiment for "{{ tickerObj.ticker }}"</h2>
+      <br />
+      <div class="row justify-content-around">
+        <div class="col-md-auto">
+          <fa-icon [icon]="faRedditAlien" class="fa-5x"></fa-icon>
+        </div>
+        <div class="col-md-auto">
+          <fa-icon [icon]="faTwitter" class="fa-5x"></fa-icon>
+        </div>
+      </div>
+      <div class="row justify-content-around">
+        <div class="col">
+          <app-social-sentiment-widget
+            [socialMedia]="'Reddit'"
+            [sentimentObject]="tickerObj.sentiment.reddit"
+          ></app-social-sentiment-widget>
+        </div>
+        <div class="col">
+          <app-social-sentiment-widget
+            [socialMedia]="'Twitter'"
+            [sentimentObject]="tickerObj.sentiment.twitter"
+          ></app-social-sentiment-widget>
+        </div>
+      </div>
+    </div>
+    <!-- End Social Sentiment -->
+  </accordion-group>
+  <br *ngIf="!isLast" />
+</accordion>

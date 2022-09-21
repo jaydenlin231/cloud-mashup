@@ -1,331 +1,102 @@
 var express = require('express');
 const axios = require('axios');
-const logger = require('morgan');
-const { routes } = require('../app');
+const alphaVantageAPI = require('../utils/alphaVantageAPI');
+const finnHubAPI = require('../utils/finnHubAPI');
 const { query } = require('express');
 var router = express.Router();
 
-/* GET users listing. */
-// http://localhost:3000/search?tickers=AAPL&topic=technology
+// Get Stock Search Results
 router.get('/', async (req, res, next) => {
   try {
-    console.log("search2/");
-
-    let alphaVantageResult = await getAlphaVantageMentionedStocks(req, res, createAlphaVantageOptionsQuery(req.query), null, null);
-    let processedResult = transformAlphaVantageRes(req, alphaVantageResult, null, null);
-
-    let finnHubNewsResult = await getFinnHubCompanyNews(req, res, createFinnHubCompanyNewsOptions(), processedResult);
-    let finnHubSocialSentimentsResults = await getFinnHubSocialSentiments(req, res, createFinnHubSocialSentimentsOptions(), finnHubNewsResult);
-    res.status(200).send(finnHubSocialSentimentsResults);
-  } catch (error) {
-    console.error(error);
-  }
-});
-
-router.get('/multi', async (req, res, next) => {
-  try {
-    console.log("search2/multi");
-
-    let tickersArray = req.query["tickers"].split(",");
-    
-    let alphaVantageResult = {};
-
-    let processedResult;
-    for (let index = 0; index < tickersArray.length; index++) {
-      const ticker = tickersArray[index];
-      let avResData;
-      if (index == 0){
-        avResData = await getAlphaVantageMentionedStocks(req, res, createAlphaVantageOptionsTicker(ticker));
-        processedResult = transformAlphaVantageRes(req, avResData, ticker, null);
-      } else {
-        avResData = await getAlphaVantageMentionedStocks(req, res, createAlphaVantageOptionsTicker(ticker));
-        processedResult = transformAlphaVantageRes(req, avResData, ticker, alphaVantageResult);
-      }
-      
-      if(index == 0){
-        alphaVantageResult = processedResult;
-      } else {
-        alphaVantageResult["articleFeed"] =  alphaVantageResult["articleFeed"].concat(processedResult["articleFeed"])
-      }
+    let result;
+    if (req.query["isMulti"] === "true") {
+      result = await multiStockTickerSearch(req, res);
+    } else {
+      result = await standardStockSearch(req, res);
     }
-    let finnHubNewsResult = await getFinnHubCompanyNews(req, res, createFinnHubCompanyNewsOptions(), alphaVantageResult);
-    let finnHubSocialSentimentsResults = await getFinnHubSocialSentiments(req, res, createFinnHubSocialSentimentsOptions(), finnHubNewsResult);
-
-    res.status(200).send(finnHubSocialSentimentsResults);
+    res.status(200).send(result);
   } catch (error) {
     console.error(error);
+    res.status(500).send(error);
   }
 });
+
+// Handle isMulti = true (multi stock search)
+async function multiStockTickerSearch(req, res) {
+  console.log("multiStockTickerSearch");
+
+  let tickersArray = req.query["tickers"].split(",");
+
+  let alphaVantageResult = {};
+
+  let processedResult;
+  for (let index = 0; index < tickersArray.length; index++) {
+    const ticker = tickersArray[index];
+    let avResData;
+    if (index == 0) {
+      avResData = await getAlphaVantageMentionedStocks(req, res, alphaVantageAPI.createAlphaVantageOptionsTickerAndTopics(ticker, req.query["topics"]));
+      // Init transform data structure
+      processedResult = transformAlphaVantageRes(req, avResData, ticker, null);
+    } else {
+      avResData = await getAlphaVantageMentionedStocks(req, res, alphaVantageAPI.createAlphaVantageOptionsTickerAndTopics(ticker, req.query["topics"]));
+      // Transform previous iteration's results
+      processedResult = transformAlphaVantageRes(req, avResData, ticker, alphaVantageResult);
+    }
+
+    if (index == 0) {
+      // Initialise output DS
+      alphaVantageResult = processedResult;
+    } else {
+      // Concatenate processed results to output DS
+      alphaVantageResult["tickerFeed"] = alphaVantageResult["tickerFeed"].concat(processedResult["tickerFeed"]);
+    }
+  }
+  // Get extended news results
+  let finnHubNewsResult = await getFinnHubCompanyNewsConcurrent(req, res, finnHubAPI.createFinnHubCompanyNewsOptions(), alphaVantageResult);
+  // Get social sentiment results
+  let finnHubSocialSentimentsResults = await getFinnHubSocialSentimentsConcurrent(req, res, finnHubAPI.createFinnHubSocialSentimentsOptions(), finnHubNewsResult);
+
+  return finnHubSocialSentimentsResults;
+}
+
+// Handle isMulti = false (standard stock search)
+async function standardStockSearch(req, res) {
+  console.log("standardStockSearch");
+  // Get news and related stocks results
+  let alphaVantageResult = await getAlphaVantageMentionedStocks(req, res, alphaVantageAPI.createAlphaVantageOptionsQuery(req.query));
+  // Transform data structure
+  let processedResult = transformAlphaVantageRes(req, alphaVantageResult, null, null);
+  // Get extended news results
+  let finnHubNewsResult = await getFinnHubCompanyNewsConcurrent(req, res, finnHubAPI.createFinnHubCompanyNewsOptions(), processedResult);
+  // Get social sentiment results
+  let finnHubSocialSentimentsResults = await getFinnHubSocialSentimentsConcurrent(req, res, finnHubAPI.createFinnHubSocialSentimentsOptions(), finnHubNewsResult);
+  return finnHubSocialSentimentsResults;
+}
 
 async function getAlphaVantageMentionedStocks(req, res, options) {
-  try {
-    const url = `https://${options.hostname}${options.path}`;
-    console.log(url);
+  const url = `https://${options.hostname}${options.path}`;
+  // console.log(url);
 
-    const response = await axios.get(url);
-    
-    return response.data;
-  } catch (error) {
-    console.error(error);
-    res.status(500).send({ error: error.message })
-    return;
-  }
-}
-async function getFinnHubCompanyNews(req, res, options, prevJSON) {
-  try {
-    for (let index = 0; index < prevJSON.articleFeed.length; index++) {
-      let url = `https://${options.hostname}${options.path}`;
-      const queryTicker = prevJSON.articleFeed[index].ticker;
-      url += ("&symbol=" + queryTicker);
-      console.log(url);
-      const response = await axios.get(url);
-      let currentResultsFound = 0;
-      const numberOfResultsLimit = 3;
+  const response = await axios.get(url);
 
-      for (let index = 0; index < response.data.length; index++) {
-        const fhArticle = response.data[index];
-        // console.log(newsArticle.url);
-        if (currentResultsFound >= numberOfResultsLimit)
-          break;
-          
-        let tickerArticleFeed = prevJSON.articleFeed.find(stock =>{
-          return stock["ticker"] === queryTicker;
-        })
-        
-        if (tickerArticleFeed.articles.some(article => article.ticker === queryTicker)){
-          console.log(relatedTicker);
-          continue;
-        }
-        
-        tickerArticleFeed.articles.push({
-          title: fhArticle.headline,
-          summary: fhArticle.summary,
-          url: fhArticle.url,
-          image: fhArticle.image,
-          source: fhArticle.source,
-          dateTimePublished: finnhubDateToISOString(fhArticle.datetime),
-          related: fhArticle.related
-        });
-        currentResultsFound++;
-      }
-    }
-    return prevJSON;
-  } catch (error) {
-    console.error(error);
-    res.status(500).send({ error: error.message })
-  }
-}
-
-
-async function getFinnHubSocialSentiments(req, res, options, prevJSON){
-    try {
-      for (let index = 0; index < prevJSON.articleFeed.length; index++) {
-        let url = `https://${options.hostname}${options.path}`;
-        const queryTicker = prevJSON.articleFeed[index].ticker;
-        url += ("&symbol=" + queryTicker);
-        console.log(url);
-        const response = await axios.get(url);
-        
-        let tickerArticleFeed = prevJSON.articleFeed.find(stock =>{
-          return stock["ticker"] === queryTicker;
-        })
-
-        let dailyRedditSentimentObj;
-        let dailyTwitterSentimentObj;
-        if(response.data.reddit.length > 0){
-          dailyRedditSentimentObj = getDailySentiment(response.data, dailyRedditSentimentObj, "reddit");
-        }
-        if(response.data.twitter.length > 0){
-          dailyTwitterSentimentObj = getDailySentiment(response.data, dailyTwitterSentimentObj, "twitter");
-        }
-
-        tickerArticleFeed["sentiment"]= {
-          reddit: dailyRedditSentimentObj,
-          twitter: dailyTwitterSentimentObj,
-        }
-      }
-      return prevJSON;
-    } catch (error) {
-      console.error(error);
-      res.status(500).send({ error: error.message })
-    }
-}
-
-const alphaVantageAPI = {
-  apikey: "0OG8A2RYBXBYEOHV",
-  datatype: "json",
-};
-
-const finnHubAPI = {
-  apikey: "cceud7qad3ifd4q5uqgg",
-  datatype: "json",
-};
-
-function getDailySentiment(fbResData, outputSentimentObj, socialMediaString) {
-  outputSentimentObj = {
-    atTime: new Date().toISOString(),
-    mention: 0,
-    positiveMention: 0,
-    negativeMention: 0,
-    positiveScore: 0,
-    negativeScore: 0,
-    score: 0
-  };
-  let numberOfSamples = fbResData[`${socialMediaString}`].length;
-  fbResData[`${socialMediaString}`].forEach(sentAnalysisObj => {
-    outputSentimentObj.mention += sentAnalysisObj["mention"];
-    outputSentimentObj.positiveMention += sentAnalysisObj["positiveMention"];
-    outputSentimentObj.negativeMention += sentAnalysisObj["negativeMention"];
-    outputSentimentObj.positiveScore += sentAnalysisObj["positiveScore"];
-    outputSentimentObj.negativeScore += sentAnalysisObj["negativeScore"];
-    outputSentimentObj.score += sentAnalysisObj["score"];
-  });
-  outputSentimentObj.positiveScore /= numberOfSamples;
-  outputSentimentObj.negativeScore /= numberOfSamples;
-  outputSentimentObj.score /= numberOfSamples;
-  return outputSentimentObj;
-}
-
-function createAlphaVantageOptionsQuery(query) {
-  const options = {
-    hostname: 'www.alphavantage.co',
-    path: '/query?',
-  }
-  let str = 'function=' + "NEWS_SENTIMENT" + '&apikey=' + alphaVantageAPI.apikey;
-
-  if (query['tickers'])
-    str = str + '&tickers=' + query['tickers'];
-
-  if (query['topics'])
-    str = str + '&topics=' + query['topics'];
-
-  options.path += str;
-  return options;
-}
-
-function createAlphaVantageOptionsTicker(queryTickers) {
-  const options = {
-    hostname: 'www.alphavantage.co',
-    path: '/query?',
-  }
-  let str = 'function=' + "NEWS_SENTIMENT" + '&tickers=' + queryTickers + '&apikey=' + alphaVantageAPI.apikey;
-
-  options.path += str;
-  return options;
-}
-
-function createFinnHubCompanyNewsOptions() {
-  // https://finnhub.io/api/v1/company-news?symbol=TSLA&from=2022-01-01&to=2022-12-31&token=cceud7qad3ifd4q5uqgg
-  const options = {
-    hostname: 'finnhub.io',
-    path: '/api/v1/company-news?',
-  }
-
-  let str = "&from=" + getYearAgoDate() +
-    "&to=" + getCurrentDate() +
-    "&token=" + finnHubAPI.apikey;
-
-  options.path += str;
-  return options;
-}
-function createFinnHubSocialSentimentsOptions() {
-  // /stock/social-sentiment?symbol=GME
-  const options = {
-    hostname: 'finnhub.io',
-    path: '/api/v1/stock/social-sentiment?',
-  }
-
-  let str = "&token=" + finnHubAPI.apikey;
-
-  options.path += str;
-  return options;
-}
-
-function getCurrentDate() {
-  let currentDate = new Date();
-  const offset = currentDate.getTimezoneOffset();
-  currentDate = new Date(currentDate.getTime() - (offset * 60 * 1000));
-  return currentDate.toISOString().split('T')[0];
-}
-
-function getYearAgoDate() {
-  let yearAgoDate = new Date();
-  yearAgoDate.setFullYear(yearAgoDate.getFullYear() - 1);
-  const offset = yearAgoDate.getTimezoneOffset();
-  yearAgoDate = new Date(yearAgoDate.getTime() - (offset * 60 * 1000));
-  return yearAgoDate.toISOString().split('T')[0];
-}
-// new Date()
-// to
-// 2022-09-12T08:37:41.974Z
-// to
-// 20220912T022615
-function jsDateToAlphaVantageDate(aDate) {
-  return aDate.toISOString().split(".")[0].replaceAll("-", "").replaceAll(":", "");
-}
-
-// 20220912T083942
-// to
-// YYYY-MM-DDTHH:mm:ss.sssZ
-// 
-// Js Date()
-function alphaVantageDateToJSDate(alphaVantageDateString) {
-  let builtISOString = (alphaVantageDateString.substring(0, 4)) + // YYYY
-    "-" +
-    (alphaVantageDateString.substring(4, 6)) + // MM
-    "-" +
-    (alphaVantageDateString.substring(6, 8)) + // DD
-    "T" +
-    (alphaVantageDateString.substring(9, 11)) + // HH
-    ":" +
-    (alphaVantageDateString.substring(11, 13)) + // mm
-    ":" +
-    (alphaVantageDateString.substring(13, 15)) + // ss
-    ".000Z";
-
-  let date = new Date(0);
-  date.setUTCMilliseconds(Date.parse(builtISOString));
-  return date;
-}
-
-function alphaVantageDateToISOString(alphaVantageDateString) {
-  let builtISOString = (alphaVantageDateString.substring(0, 4)) + // YYYY
-    "-" +
-    (alphaVantageDateString.substring(4, 6)) + // MM
-    "-" +
-    (alphaVantageDateString.substring(6, 8)) + // DD
-    "T" +
-    (alphaVantageDateString.substring(9, 11)) + // HH
-    ":" +
-    (alphaVantageDateString.substring(11, 13)) + // mm
-    ":" +
-    (alphaVantageDateString.substring(13, 15)) + // ss
-    ".000Z";
-
-  return builtISOString;
-}
-
-function finnhubDateToISOString(finnhubDateEpochSec){
-  let date = new Date(0);
-  date.setUTCSeconds(finnhubDateEpochSec);
-  return date.toISOString();
+  return response.data;
 }
 
 function transformAlphaVantageRes(req, avResData, aMultiQuerySplitTicker, prevJSON) {
-  let articleFeed = [];
+  let tickerFeed = [];
 
-  // Handle /search 
-  if(req.query["tickers"] && aMultiQuerySplitTicker === null){
+  // Handle isMulti = false
+  if (req.query["tickers"] && aMultiQuerySplitTicker === null) {
     let queryTickersArray = req.query["tickers"].split(",");
     queryTickersArray.forEach(ticker => {
-      articleFeed.push({ticker, articles: []});
+      tickerFeed.push({ ticker, articles: [] });
     });
   }
-  // Handle /search/multi  
+  // Handle isMulti = true
   else if (aMultiQuerySplitTicker !== null) {
-    articleFeed.push({ticker: aMultiQuerySplitTicker, articles: []});
+    tickerFeed.push({ ticker: aMultiQuerySplitTicker, articles: [] });
   }
-  
+
   let currentResultsFound = 0;
   const numberOfResultsLimit = 3;
 
@@ -338,20 +109,26 @@ function transformAlphaVantageRes(req, avResData, aMultiQuerySplitTicker, prevJS
       let relatedTickerObj = avArticle.ticker_sentiment[j];
       let relatedTicker = relatedTickerObj.ticker;
 
+      // Got enough results
       if (currentResultsFound >= numberOfResultsLimit)
         break articleLoop;
 
-      if (articleFeed.some(t => t.ticker === relatedTicker)){
+      // Prevent duplicated related stock tickers in current iteration
+      if (tickerFeed.some(t => t.ticker === relatedTicker)) {
         continue tickerLoop;
-      } 
+      }
+      // Prevent CRYPTO:... FOREX:...
       if (relatedTicker.includes(":"))
         continue tickerLoop;
+      // Prevent query tickers in related stock tickers
       if ((req.query["tickers"] !== undefined && req.query["tickers"].includes(relatedTicker)))
         continue tickerLoop;
-      if ((prevJSON && prevJSON.articleFeed &&prevJSON.articleFeed.some(t => t.ticker === relatedTicker)))
+      // Prevent duplicated related stock tickers in previous iteration
+      if ((prevJSON && prevJSON.tickerFeed && prevJSON.tickerFeed.some(t => t.ticker === relatedTicker)))
         continue tickerLoop;
 
-      articleFeed.push({
+      // Prepare DS
+      tickerFeed.push({
         ticker: relatedTicker,
         articles: [
           {
@@ -360,7 +137,7 @@ function transformAlphaVantageRes(req, avResData, aMultiQuerySplitTicker, prevJS
             url: avArticle.url,
             image: avArticle.banner_image,
             source: avArticle.source,
-            dateTimePublished: alphaVantageDateToISOString(avArticle.time_published),
+            dateTimePublished: alphaVantageAPI.alphaVantageDateToISOString(avArticle.time_published),
             topics: avArticle.topics,
             related: (aMultiQuerySplitTicker !== null ? aMultiQuerySplitTicker : query.tickers)
           },
@@ -369,12 +146,104 @@ function transformAlphaVantageRes(req, avResData, aMultiQuerySplitTicker, prevJS
       currentResultsFound++;
     }
   }
+  // Append DS
   let alphaVantageResultObj = {
     queryTickers: req.query["tickers"],
     queryTopics: req.query["topics"],
-    articleFeed
+    tickerFeed
   }
   return alphaVantageResultObj;
+}
+
+async function getFinnHubCompanyNewsConcurrent(req, res, options, prevJSON) {
+  let urlArray = [];
+  let queryTickerArray = [];
+  // Init external endpoint urls
+  for (let index = 0; index < prevJSON.tickerFeed.length; index++) {
+    let url = `https://${options.hostname}${options.path}`;
+    const queryTicker = prevJSON.tickerFeed[index].ticker;
+    url += ("&symbol=" + queryTicker);
+    // console.log(url);
+    urlArray.push(url);
+    queryTickerArray.push(queryTicker);
+  }
+
+  // Concurrent GET requests
+  const responseArray = await Promise.all(urlArray.map(url => axios.get(url)));
+
+  for (let i = 0; i < responseArray.length; i++) {
+    let responseData = responseArray[i].data;
+    let currentResultsFound = 0;
+    const numberOfResultsLimit = 3;
+    for (let j = 0; j < responseData.length; j++) {
+      const fhArticle = responseData[j];
+      // Got enough results
+      if (currentResultsFound >= numberOfResultsLimit)
+        break;
+
+      // Find Ticker Object to update
+      let tickerObject = prevJSON.tickerFeed.find(stock => {
+        return stock["ticker"] === queryTickerArray[i];
+      })
+
+      // Prevent articles with duplicate stock ticker
+      if (tickerObject.articles.some(article => article.ticker === queryTickerArray[j])) {
+        continue;
+      }
+
+      // Push DS
+      tickerObject.articles.push({
+        title: fhArticle.headline,
+        summary: fhArticle.summary,
+        url: fhArticle.url,
+        image: fhArticle.image,
+        source: fhArticle.source,
+        dateTimePublished: finnHubAPI.finnhubDateToISOString(fhArticle.datetime),
+        related: fhArticle.related
+      });
+      currentResultsFound++;
+    }
+  }
+  return prevJSON;
+}
+
+async function getFinnHubSocialSentimentsConcurrent(req, res, options, prevJSON) {
+  let urlArray = [];
+  let queryTickerArray = [];
+  // Init external endpoint urls
+  for (let i = 0; i < prevJSON.tickerFeed.length; i++) {
+    let url = `https://${options.hostname}${options.path}`;
+    const queryTicker = prevJSON.tickerFeed[i].ticker;
+    url += ("&symbol=" + queryTicker);
+    // console.log(url);
+    urlArray.push(url);
+    queryTickerArray.push(queryTicker);
+  }
+  // Concurrent GET requests
+  const responseArray = await Promise.all(urlArray.map(url => axios.get(url)));
+
+  for (let i = 0; i < responseArray.length; i++) {
+    let responseData = responseArray[i].data;
+    // Find Ticker Object to update
+    let tickerObject = prevJSON.tickerFeed.find(stock => {
+      return stock["ticker"] === queryTickerArray[i];
+    })
+
+    let redditSentimentObj = null;
+    let twitterSentimentObj = null;
+    if (responseData.reddit.length > 0) {
+      redditSentimentObj = finnHubAPI.aggregateYearlySentiment(responseData, redditSentimentObj, "reddit");
+    }
+    if (responseData.twitter.length > 0) {
+      twitterSentimentObj = finnHubAPI.aggregateYearlySentiment(responseData, twitterSentimentObj, "twitter");
+    }
+    // Append DS
+    tickerObject["sentiment"] = {
+      reddit: redditSentimentObj,
+      twitter: twitterSentimentObj,
+    }
+  }
+  return prevJSON;
 }
 
 module.exports = router;

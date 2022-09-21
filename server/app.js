@@ -1,12 +1,16 @@
+require('dotenv').config();
+
 var createError = require('http-errors');
 var express = require('express');
 var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
+var cors = require('cors')
 
 var indexRouter = require('./routes/index');
 var searchRouter = require('./routes/search');
-// var searchRouter2 = require('./routes/search');
+var symbolRouter = require('./routes/symbol');
+var pageViewCounterRouter = require('./routes/pageViewCounter');
 
 var app = express();
 const hostname = '127.0.0.1';
@@ -17,14 +21,16 @@ app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'jade');
 
 app.use(logger('dev'));
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/', indexRouter);
-// app.use('/search2', searchRouter2);
-app.use('/search', searchRouter);
+app.use('/api/search', searchRouter);
+app.use('/api/symbol', symbolRouter);
+app.use('/api/page-view-counter', pageViewCounterRouter);
 
 app.listen(port, function () {
   console.log(`Express app listening at http://${hostname}:${port}/`);

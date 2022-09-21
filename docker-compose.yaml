@@ -1,0 +1,19 @@
+version: '3.8' # specify docker-compose version
+ 
+services:
+ angular: # name of the first service
+  # image: jaydenlin/cloud-mashup:angular-alpine
+  platform: linux/amd64
+  build: client 
+  container_name: frontend
+  ports:
+  - "80:4200" 
+ 
+ express: # name of the second service
+  env_file:
+  - prod.env
+  platform: linux/amd64
+  build: server 
+  container_name: backend
+  ports:
+  - "443:3000" 

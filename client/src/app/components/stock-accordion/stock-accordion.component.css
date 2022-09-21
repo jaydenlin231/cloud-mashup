@@ -1,0 +1,28 @@
+.carousel .item {
+  max-height: 50vh;
+}
+
+.carousel-caption * {
+  background-color: white;
+}
+
+/* Carousel Image */
+.item img {
+  max-height: 50vh;
+  -webkit-filter: blur(5px);
+}
+
+/* Carousel Title Summary Text */
+p {
+  color: black;
+}
+
+/* Carousel Footer Text */
+small {
+  color: black;
+}
+
+/* Article Link */
+a {
+  text-decoration: none !important;
+}

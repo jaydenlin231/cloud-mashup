@@ -1,0 +1,90 @@
+<div>
+  <br />
+  <h3>Yearly {{ socialMedia }} Sentiment</h3>
+  <div *ngIf="sentimentObject !== null">
+    <div class="row">
+      <div class="col-4">
+        <small>Mentions</small>
+      </div>
+      <div class="col-2">
+        <small>{{ mention }}</small>
+      </div>
+      <!-- Start Mentions Bar -->
+      <div class="col">
+        <progressbar
+          [max]="mention"
+          [value]="mention"
+          type="info"
+          [striped]="true"
+          [animate]="true"
+        ></progressbar>
+      </div>
+    </div>
+    <!-- End Mentions Bar -->
+    <!-- Start Positive Mentions Bar -->
+    <div class="row">
+      <div class="col-4">
+        <small>Positive Mentions</small>
+      </div>
+      <div class="col-2">
+        <small>{{ positiveMention }}</small>
+      </div>
+      <div class="col">
+        <progressbar
+          [max]="mention"
+          [value]="positiveMention"
+          type="success"
+          [striped]="true"
+          [animate]="true"
+        ></progressbar>
+      </div>
+    </div>
+    <!-- End Positive Mentions Bar -->
+    <!-- Start Negative Mentions Bar -->
+    <div class="row">
+      <div class="col-4">
+        <small>Negative Mentions</small>
+      </div>
+      <div class="col-2">
+        <small>{{ negativeMention }}</small>
+      </div>
+      <div class="col">
+        <progressbar
+          [max]="mention"
+          [value]="negativeMention"
+          type="danger"
+          [striped]="true"
+          [animate]="true"
+        ></progressbar>
+      </div>
+    </div>
+    <!-- End Negative Mentions Bar -->
+    <!-- Start Sentiment Score Bar -->
+    <div class="row">
+      <div class="col-4">
+        <small>Sentiment Score</small>
+      </div>
+      <div class="col-2">
+        <small>{{ score | number: "1.0-2" }}</small>
+      </div>
+      <div class="col">
+        <progressbar
+          [max]="2"
+          [value]="score + 1"
+          type="warning"
+          [striped]="true"
+          [animate]="true"
+        ></progressbar>
+      </div>
+    </div>
+    <!-- End Sentiment Score Bar -->
+  </div>
+  <!-- Start Unavailable Alert -->
+  <div *ngIf="sentimentObject === null">
+    <alert type="warning">
+      <strong>⚠️ Something went wrong!</strong> {{ socialMedia }} Sentiment is not
+      available at the moment.
+    </alert>
+    <!-- End Unavailable Alert -->
+  </div>
+</div>

@@ -1,0 +1,178 @@
+<div class="container-fluid" style="padding: 2em">
+  <!-- Start Header -->
+  <div class="row">
+    <div class="col-md-auto align-items-center">
+      <a href="/"
+        ><img src="../../../assets/images/wsb-logo.png" style="height: 5em"
+      /></a>
+    </div>
+    <div class="col-md-auto">
+      <div class="row">
+        <h1><b>Wolf of r/WallStreetBets</b></h1>
+      </div>
+      <div class="row">
+        <h4>
+          This page has been viewed:
+          <span class="badge bg-success" *ngIf="pageViewCounter"
+            >{{ pageViewCounter }}
+          </span>
+          <span
+            class="badge bg-danger"
+            *ngIf="pageViewCounter === null || pageViewCounter === undefined"
+            >Unavailable
+          </span>
+          times.
+        </h4>
+      </div>
+    </div>
+  </div>
+  <!-- End Header -->
+  <div class="card" style="padding: 2em">
+    <h2>US Stock Market Search</h2>
+    <!-- Start Search Dropdowns -->
+    <div class="row">
+      <div class="col">
+        <ng-multiselect-dropdown
+          [disabled]="!isSmartTickersSearchMode"
+          [placeholder]="'r/WSB Top 50 Most Discussed Stocks'"
+          [settings]="tickersDropdownSettings"
+          [data]="tickersList"
+          [(ngModel)]="selectedTickers"
+          (onDeSelect)="onTickersMultiDropdownDeselect()"
+        >
+        </ng-multiselect-dropdown>
+      </div>
+      <div class="col">
+        <ng-multiselect-dropdown
+          [disabled]="!isSmartTopicsSearchMode"
+          [placeholder]="'News Topics'"
+          [settings]="topicsDropdownSettings"
+          [data]="topicsList"
+          [(ngModel)]="selectedTopics"
+          (onDeSelect)="onTopicsMultiDropdownDeselect()"
+        >
+        </ng-multiselect-dropdown>
+      </div>
+    </div>
+    <!-- End Search Dropdowns -->
+    <br />
+    <!-- Start Search Inputs -->
+    <div class="row">
+      <div class="col">
+        <input
+          type="text"
+          [(ngModel)]="queryTickersString"
+          [placeholder]="'Stock Tickers Query'"
+          class="form-control"
+          [disabled]="isSmartTickersSearchMode"
+        />
+      </div>
+      <div class="col">
+        <input
+          type="text"
+          [(ngModel)]="queryTopicsString"
+          [placeholder]="'News Topics Query'"
+          class="form-control"
+          [disabled]="isSmartTopicsSearchMode"
+        />
+      </div>
+    </div>
+    <!-- End Search Inputs -->
+    <br />
+    <div class="row align-items-center">
+      <!-- Start Button Group -->
+      <div class="col-6">
+        <div class="form-control btn-group" role="group">
+          <button
+            type="button"
+            class="btn btn-success btn-block"
+            (click)="getStockSearchResults()"
+            [disabled]="isSearchDisabled()"
+          >
+            Search
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary btn-block"
+            (click)="onClearButtonClick()"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+      <!-- End Button Group -->
+      <!-- Start Switch Group -->
+      <div class="col-6 d-flex justify-content-around">
+        <div class="form-check form-switch">
+          <input
+            class="form-check-input"
+            [(ngModel)]="isMultiTickersSearchMode"
+            (ngModelChange)="onMultiTickersSearchSwitchesChange()"
+            type="checkbox"
+          />
+          <label class="form-check-label">Multi Tickers Search</label>
+        </div>
+        <div class="form-check form-switch">
+          <input
+            class="form-check-input"
+            [(ngModel)]="isSmartTickersSearchMode"
+            type="checkbox"
+            (ngModelChange)="onSmartTickerSearchSwitchChange()"
+          />
+          <label class="form-check-label">Smart Tickers Suggestion</label>
+        </div>
+        <div class="form-check form-switch">
+          <input
+            class="form-check-input"
+            [(ngModel)]="isSmartTopicsSearchMode"
+            type="checkbox"
+            (ngModelChange)="onSmartTopicSearchSwitchesChange()"
+          />
+          <label class="form-check-label">Smart Topics Suggestion</label>
+        </div>
+      </div>
+      <!-- End Switch Group -->
+    </div>
+    <br />
+    <hr />
+    <br />
+    <!-- Start Direct Results -->
+    <div class="row justify-content-start">
+      <div class="col-4">
+        <h2>Direct Results Found</h2>
+      </div>
+    </div>
+    <div class="row d-flex justify-content-center" *ngIf="isLoading">
+      <mat-spinner *ngIf="isLoading"></mat-spinner>
+    </div>
+    <div *ngIf="theModel">
+      <app-stock-accordion
+        *ngFor="let tickerObj of directResultsArray; index as i; last as isLast"
+        [tickerObj]="tickerObj"
+        [isLast]="isLast"
+      >
+      </app-stock-accordion>
+    </div>
+    <!-- End Direct Results -->
+    <br />
+    <hr />
+    <br />
+    <!-- Start Related Results -->
+    <h2>Related Results Found</h2>
+    <div class="row d-flex justify-content-center" *ngIf="isLoading">
+      <mat-spinner *ngIf="isLoading"></mat-spinner>
+    </div>
+    <div *ngIf="theModel">
+      <app-stock-accordion
+        *ngFor="
+          let tickerObj of relatedResultsArray;
+          index as i;
+          first as isFirst
+        "
+        [tickerObj]="tickerObj"
+      >
+      </app-stock-accordion>
+    </div>
+    <!-- End Related Results -->
+  </div>
+</div>
